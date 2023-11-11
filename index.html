@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project 2</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: 200px;
+            padding: 10px;
+            font-size: 14px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            color: #333;
+        }
+        #sliderContainer {
+            text-align: center;
+            padding: 20px;
+        }
+        input[type=range] {
+            width: 300px;
+            margin: 10px 0;
+        }
+        #map {
+            margin-top: 20px;
+        }
+        .bar {
+            fill: lightblue;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Project 2</h1>
+        <div id="sliderContainer">
+            <input type="range" id="yearSlider">
+            <p>Year: <span id="selectedYear"></span></p>
+        </div>
+        <div id="map"></div>
+        <div id="player-selection">
+            <label for="player-dropdown">Select Player:</label>
+            <select id="player-dropdown"></select>
+        </div>
+        <div id="bar-chart"></div>
+    </div>
+
+    <script>
+        var globalData;
+        var minYear, maxYear, currentYear;
+
+        d3.csv('yearly_aggregated_players.csv', function(d) {
+            d.year = +d.year; // Convert year to number
+            return d;
+        }).then(function(data) {
+            globalData = data;
+
+            minYear = d3.min(globalData, d => d.year);
+            maxYear = d3.max(globalData, d => d.year);
+            currentYear = minYear;
+
+            d3.select('#yearSlider')
+              .attr('min', minYear)
+              .attr('max', maxYear)
+              .attr('value', minYear);
+            d3.select('#selectedYear').text(minYear);
+
+            updateMapForYear(currentYear);
+        }).catch(error => {
+            console.error('Error loading the CSV file:', error);
+        });
+
+        function updateMapForYear(year) {
+            var filteredData = globalData.filter(d => d.year === year);
+            var countryCounts = d3.rollup(filteredData, v => v.length, d => d.country_of_birth);
+            createMap(countryCounts);
+        }
+
+        function createMap(countryCounts) {
+            d3.json('world.geojson').then(function(geoData) {
+                drawMap(geoData, countryCounts);
+            }).catch(error => {
+                console.error('Error loading the GeoJSON file:', error);
+            });
+        }
+
+        function drawMap(geoData, countryCounts) {
+            d3.select('#map svg').remove();
+
+            var width = 960, height = 500;
+            var svg = d3.select('#map').append('svg')
+                .attr('viewBox', `0 0 ${width} ${height}`)
+                .attr('preserveAspectRatio', 'xMidYMid meet');
+
+            var projection = d3.geoMercator()
+                .translate([width / 2, height / 2])
+                .scale(100);
+
+            var path = d3.geoPath().projection(projection);
+
+            var colorScale = d3.scaleSequential()
+                .domain([0, d3.max(countryCounts.values())])
+                .interpolator(d3.interpolateBlues);
+
+            var tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip');
+
+            svg.selectAll('path')
+                .data(geoData.features)
+                .enter().append('path')
+                .attr('d', path)
+                .style('fill', function(d) {
+                    var country = d.properties.name;
+                    var count = countryCounts.get(country) || 0;
+                    return count > 0 ? colorScale(count) : 'white';
+                })
+                .style('stroke', '#FFF')
+                .style('stroke-width', 0.5)
+                .on('mouseover', function(event, d) {
+                    var country = d.properties.name;
+                    var playerCount = countryCounts.get(country) || 0;
+                    var tooltipContent = `<strong>${country}</strong><br/>Players: ${playerCount}`;
+
+                    tooltip.html(tooltipContent)
+                           .style('left', (event.pageX + 10) + 'px')
+                           .style('top', (event.pageY + 10) + 'px')
+                           .transition()
+                           .duration(200)
+                           .style('opacity', 0.9);
+                })
+                .on('mousemove', function(event) {
+                    tooltip.style('left', (event.pageX + 10) + 'px')
+                           .style('top', (event.pageY + 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    tooltip.transition()
+                           .duration(500)
+                           .style('opacity', 0);
+                });
+
+            // Slider event listener
+            d3.select('#yearSlider').on('input', function() {
+                currentYear = +this.value;
+                d3.select('#selectedYear').text(currentYear);
+                updateMapForYear(currentYear);
+            });
+        }
+        
+
+        // Bar chart
+        function loadData() {
+            Promise.all([
+                d3.csv("../original_data/player_stats_top_5_teams.csv"),
+                d3.csv("../original_data/clubs.csv")
+            ]).then(data => {
+                const [playerStatsData, clubsData] = data;
+                populatePlayerDropdown(playerStatsData, clubsData);
+                const initialPlayerName = playerStatsData[0].Name;
+                updateVisualizations(initialPlayerName, playerStatsData, clubsData);
+            });
+        }
+
+        function populatePlayerDropdown(playerStatsData, clubsData) {
+            const playerNames = Array.from(new Set(playerStatsData.map(d => d.Name)));
+            const select = d3.select("#player-dropdown");
+            select.selectAll("option")
+                .data(playerNames)
+                .enter()
+                .append("option")
+                .text(d => d)
+                .attr("value", d => d);
+            select.on("change", function (event) {
+                const selectedPlayerName = event.target.value;
+                updateVisualizations(selectedPlayerName, playerStatsData, clubsData);
+            });
+        }
+
+        function updateVisualizations(selectedPlayerName, playerStatsData, clubsData) {
+            renderBarChart(selectedPlayerName, playerStatsData);
+        }
+
+        function renderBarChart(selectedPlayerName, playerStatsData) {
+            const filteredData = playerStatsData.filter(d => d.Name === selectedPlayerName);
+            let goalsByYear = d3.rollups(filteredData, v => d3.sum(v, d => d.Goals), d => d.Year)
+                .map(([Year, Goals]) => ({ Year, Goals }));
+            
+            const margin = { top: 20, right: 30, bottom: 60, left: 60 },
+                width = 460 - margin.left - margin.right,
+                height = 400 - margin.top - margin.bottom;
+
+            d3.select("#bar-chart").html("");
+
+            const svg = d3.select("#bar-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+
+            const x = d3.scaleBand()
+                .range([0, width])
+                .domain(goalsByYear.map(d => d.Year))
+                .padding(0.2);
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .attr("text-anchor", "end");
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(goalsByYear, d => +d.Goals)])
+                .nice()
+                .range([height, 0]);
+            svg.append("g")
+                .call(d3.axisLeft(y));
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + margin.top + 20)
+                .style("text-anchor", "middle")
+                .text("Year");
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -height / 2)
+                .attr("y", -margin.left)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Goals");
+
+            const tooltip = d3.select("#bar-chart").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background-color", "white")
+                .style("border", "solid")
+                .style("border-width", "1px")
+                .style("border-radius", "5px")
+                .style("padding", "5px");
+
+            svg.selectAll("mybar")
+                .data(goalsByYear)
+                .join("rect")
+                .attr("x", d => x(d.Year))
+                .attr("y", d => y(d.Goals))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.Goals))
+                .attr("fill", "#69b3a2")
+                .attr("class", "bar")
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1);
+                    tooltip.html("Year: " + d.Year + "<br/>Goals: " + d.Goals)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mousemove", (event) => {
+                    tooltip.style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
