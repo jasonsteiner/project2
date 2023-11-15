@@ -17931,7 +17931,7 @@
             "type": "Feature",
             "id": "GBR",
             "properties": {
-                "name": "United Kingdom"
+                "name": "England"
             },
             "geometry": {
                 "type": "MultiPolygon",
@@ -41787,7 +41787,7 @@
             "type": "Feature",
             "id": "USA",
             "properties": {
-                "name": "United States of America"
+                "name": "United States"
             },
             "geometry": {
                 "type": "MultiPolygon",
