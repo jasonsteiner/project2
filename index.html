@@ -50,10 +50,11 @@
         </div>
         <div id="map"></div>
         <div id="player-selection">
-            <label for="player-dropdown">Select Player:</label>
+            <label for="player-dropdown">Click a Year/Country First!</label>
             <select id="player-dropdown"></select>
         </div>
         <div id="bar-chart"></div>
+        <div id="scatterplot"></div>
     </div>
 
     <script>
@@ -62,6 +63,8 @@
 
         d3.csv('yearly_aggregated_players.csv', function (d) {
             d.year = +d.year; // Convert year to number
+            d.goals = +d.goals; // Ensure goals is a number
+            d.assists = +d.assists; // Ensure assists is a number
             return d;
         }).then(function (data) {
             globalData = data;
@@ -73,10 +76,15 @@
             d3.select('#yearSlider')
                 .attr('min', minYear)
                 .attr('max', maxYear)
-                .attr('value', minYear);
-            d3.select('#selectedYear').text(minYear);
+                .attr('value', minYear)
+                .on('input', function () {
+                    currentYear = +this.value;
+                    d3.select('#selectedYear').text(currentYear);
+                    updateMapForYear(currentYear);
+                });
 
             updateMapForYear(currentYear);
+            createScatterPlot();
         }).catch(error => {
             console.error('Error loading the CSV file:', error);
         });
@@ -101,14 +109,15 @@
             var width = 960, height = 500;
             var svg = d3.select('#map').append('svg')
                 .attr('viewBox', `0 0 ${width} ${height}`)
-                .attr('preserveAspectRatio', 'xMidYMid meet')
-            //.attr("background-color", "black");
+                .attr('preserveAspectRatio', 'xMidYMid meet');
 
+            // Append a rect element first for the background
             svg.append('rect')
                 .attr('width', '100%')
                 .attr('height', '100%')
-                .attr('fill', '#333');
+                .attr('fill', '#333'); // Set the fill to the desired background color
 
+            var g = svg.append('g'); // Creating a group which will hold the map paths
 
             var projection = d3.geoMercator()
                 .translate([width / 2, height / 2])
@@ -123,9 +132,7 @@
             var tooltip = d3.select('body').append('div')
                 .attr('class', 'tooltip');
 
-            var viewport = svg.append('g')
-
-            viewport.selectAll('path')
+            g.selectAll('path') // Changed from 'viewport.selectAll' to 'g.selectAll'
                 .data(geoData.features)
                 .enter().append('path')
                 .attr('d', path)
@@ -133,8 +140,7 @@
                     var country = d.properties.name;
                     var count = countryCounts.get(country) || 0;
                     return count > 0 ? colorScale(count) : 'white';
-                }
-                )
+                })
                 .style('stroke', '#FFF')
                 .style('stroke-width', 0.5)
                 .on('mouseover', function (event, d) {
@@ -157,72 +163,59 @@
                     tooltip.transition()
                         .duration(500)
                         .style('opacity', 0);
+                })
+                .on('click', function (event, d) {
+                    var clickedCountry = d.properties.name;
+                    updatePlayerDropdownForCountry(clickedCountry);
                 });
 
-            // Slider event listener
-            d3.select('#yearSlider').on('input', function () {
-                currentYear = +this.value;
-                d3.select('#selectedYear').text(currentYear);
-                updateMapForYear(currentYear);
-            });
+            var zoom = d3.zoom()
+                .scaleExtent([1, 8])
+                .on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                });
 
-            // Map Pan and Zoom
-            var zooming = d3.zoom().on("zoom", map_zoomed);
+            svg.call(zoom);
+        }
 
-            svg.call(zooming);
+        function updatePlayerDropdownForCountry(country) {
+            var playersFromCountryAndYear = globalData.filter(d => d.country_of_birth === country && d.year === currentYear);
 
-            function map_zoomed({ transform }) {
+            var playerAvgGoalsAllYears = d3.rollups(globalData,
+                v => d3.sum(v, d => d.goals) / v.length,
+                d => d.name
+            ).map(([name, avgGoals]) => ({ name, avgGoals }));
 
-                viewport.attr("transform", transform.toString());
-                viewport.selectAll('path').style("stroke-width", 1/ transform.k)
+            var filteredPlayerAvgGoals = playerAvgGoalsAllYears.filter(d =>
+                playersFromCountryAndYear.some(player => player.name === d.name)
+            );
+
+            filteredPlayerAvgGoals.sort((a, b) => b.avgGoals - a.avgGoals);
+
+            var select = d3.select("#player-dropdown").html("");
+
+            select.selectAll("option")
+                .data(filteredPlayerAvgGoals)
+                .enter()
+                .append("option")
+                .text(d => `${d.name} (${d.avgGoals.toFixed(2)} avg goals)`)
+                .attr("value", d => d.name);
+
+            if (filteredPlayerAvgGoals.length > 0) {
+                updateBarChart(filteredPlayerAvgGoals[0].name, playersFromCountryAndYear);
             }
         }
 
-
-
-        // Bar chart
-        function loadData() {
-            Promise.all([
-                d3.csv("../original_data/player_stats_top_5_teams.csv"),
-                d3.csv("../original_data/clubs.csv")
-            ]).then(data => {
-                const [playerStatsData, clubsData] = data;
-                populatePlayerDropdown(playerStatsData, clubsData);
-                const initialPlayerName = playerStatsData[0].Name;
-                updateVisualizations(initialPlayerName, playerStatsData, clubsData);
-            });
-        }
-
-        function populatePlayerDropdown(playerStatsData, clubsData) {
-            const playerNames = Array.from(new Set(playerStatsData.map(d => d.Name)));
-            const select = d3.select("#player-dropdown");
-            select.selectAll("option")
-                .data(playerNames)
-                .enter()
-                .append("option")
-                .text(d => d)
-                .attr("value", d => d);
-            select.on("change", function (event) {
-                const selectedPlayerName = event.target.value;
-                updateVisualizations(selectedPlayerName, playerStatsData, clubsData);
-            });
-        }
-
-        function updateVisualizations(selectedPlayerName, playerStatsData, clubsData) {
-            renderBarChart(selectedPlayerName, playerStatsData);
-        }
-
-        function renderBarChart(selectedPlayerName, playerStatsData) {
-            const filteredData = playerStatsData.filter(d => d.Name === selectedPlayerName);
-            console.log(filteredData)
-            let goalsByYear = d3.rollups(filteredData, v => d3.sum(v, d => d.Goals), d => d.Year)
-                .map(([Year, Goals]) => ({ Year, Goals }));
+        function updateBarChart(selectedPlayerName, playerData) {
+            const filteredData = playerData.filter(d => d.name === selectedPlayerName);
+            let goalsByYear = d3.rollups(filteredData, v => d3.sum(v, d => +d.goals), d => d.year)
+                .map(([year, goals]) => ({ year, goals }));
 
             const margin = { top: 20, right: 30, bottom: 60, left: 60 },
                 width = 460 - margin.left - margin.right,
                 height = 400 - margin.top - margin.bottom;
 
-            d3.select("#bar-chart").html("");
+            d3.select("#bar-chart").select("svg").remove();
 
             const svg = d3.select("#bar-chart")
                 .append("svg")
@@ -231,453 +224,102 @@
                 .append("g")
                 .attr("transform", `translate(${margin.left},${margin.top})`);
 
-            svg.append("text")
-                .attr("x", width / 2)
-                .attr("y", -margin.top / 2)
-                .attr("text-anchor", "middle")
-                .style("font-size", "18px")
-
             const x = d3.scaleBand()
                 .range([0, width])
-                .domain(goalsByYear.map(d => d.Year))
+                .domain(goalsByYear.map(d => d.year))
                 .padding(0.2);
-            svg.append("g")
-                .attr("transform", `translate(0,${height})`)
-                .call(d3.axisBottom(x))
-                .selectAll("text")
-                .attr("transform", "rotate(-45)")
-                .attr("text-anchor", "end");
 
             const y = d3.scaleLinear()
-                .domain([0, d3.max(goalsByYear, d => +d.Goals)])
-                .nice()
+                .domain([0, d3.max(goalsByYear, d => d.goals)])
+                .range([height, 0]);
+
+            svg.selectAll("bars")
+                .data(goalsByYear)
+                .enter()
+                .append("rect")
+                .attr("x", d => x(d.year))
+                .attr("y", d => y(d.goals))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.goals))
+                .attr("fill", "#69b3a2");
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x));
+
+            svg.append("g")
+                .call(d3.axisLeft(y));
+        }
+
+        d3.select("#player-dropdown").on("change", function () {
+            var selectedPlayerName = d3.select(this).property('value');
+            updateBarChart(selectedPlayerName, globalData);
+        });
+
+        function createScatterPlot() {
+            // Calculate average goals and assists for each player
+            var playerAverages = d3.rollups(globalData,
+                v => ({
+                    avgGoals: d3.mean(v, d => d.goals),
+                    avgAssists: d3.mean(v, d => d.assists)
+                }),
+                d => d.name
+            ).map(([name, averages]) => ({ name, ...averages }));
+
+            var margin = { top: 10, right: 30, bottom: 30, left: 40 },
+                width = 460 - margin.left - margin.right,
+                height = 400 - margin.top - margin.bottom;
+
+            var svg = d3.select("#scatterplot")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            var x = d3.scaleLinear()
+                .domain([0, d3.max(playerAverages, d => d.avgGoals)])
+                .range([0, width]);
+            svg.append("g")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(x));
+
+            var y = d3.scaleLinear()
+                .domain([0, d3.max(playerAverages, d => d.avgAssists)])
                 .range([height, 0]);
             svg.append("g")
                 .call(d3.axisLeft(y));
 
-            svg.append("text")
-                .attr("x", width / 2)
-                .attr("y", height + margin.top + 20)
-                .style("text-anchor", "middle")
-                .text("Year");
-            svg.append("text")
-                .attr("transform", "rotate(-90)")
-                .attr("x", -height / 2)
-                .attr("y", -margin.left)
-                .attr("dy", "1em")
-                .style("text-anchor", "middle")
-                .text("Goals");
-
-            const tooltip = d3.select("#bar-chart").append("div")
+            var tooltip = d3.select("body").append("div")
                 .attr("class", "tooltip")
-                .style("opacity", 0)
-                .style("position", "absolute")
-                .style("background-color", "white")
-                .style("border", "solid")
-                .style("border-width", "1px")
-                .style("border-radius", "5px")
-                .style("padding", "5px");
+                .style("opacity", 0);
 
-            svg.selectAll("mybar")
-                .data(goalsByYear)
-                .join("rect")
-                .attr("x", d => x(d.Year))
-                .attr("y", d => y(d.Goals))
-                .attr("width", x.bandwidth())
-                .attr("height", d => height - y(d.Goals))
-                .attr("fill", "#69b3a2")
-                .attr("class", "bar")
-                .on("mouseover", (event, d) => {
-                    tooltip.style("opacity", 1);
-                    tooltip.html("Year: " + d.Year + "<br/>Goals: " + d.Goals)
-                        .style("left", (event.pageX + 10) + "px")
+            // Add dots with hover functionality
+            svg.append('g')
+                .selectAll("dot")
+                .data(playerAverages)
+                .enter()
+                .append("circle")
+                .attr("cx", d => x(d.avgGoals))
+                .attr("cy", d => y(d.avgAssists))
+                .attr("r", 3)
+                .style("fill", "#69b3a2")
+                .on("mouseover", function (event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`Name: ${d.name}<br>Avg Goals: ${d.avgGoals.toFixed(2)}<br>Avg Assists: ${d.avgAssists.toFixed(2)}`)
+                        .style("left", (event.pageX) + "px")
                         .style("top", (event.pageY - 28) + "px");
                 })
-                .on("mousemove", (event) => {
-                    tooltip.style("left", (event.pageX + 10) + "px")
-                        .style("top", (event.pageY - 28) + "px");
-                })
-                .on("mouseout", () => {
-                    tooltip.style("opacity", 0);
+                .on("mouseout", function (d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
                 });
-
-                d3.select("#bar-chart").append('div').attr("class", 'tag')
-
-                d3.select(".tag").append('text')
-               .text('Club: '+filteredData[filteredData.length-1].Club+' ')
-               .attr("transform", "translate(0, 400)")
-
-               d3.select(".tag").append('text')
-               .text('Nationality: '+filteredData[filteredData.length-1].Nationality+' ')
-               .attr("transform", "translate(400, 40)")
-
-               d3.select(".tag").append('text')
-               .text('Position: '+filteredData[filteredData.length-1].Position+' ')
-               .attr("transform", "translate(400, 40)")
-            
         }
 
-        loadData();
-
-        // },
-        // {
-        // "type": "Feature",
-        // "id": "BMU",
-        // "properties": {
-        // "name": "Bermuda"
-        // },
-        // "geometry": {
-        // "type": "Polygon",
-        // "coordinates": [
-        // [
-        // [
-        // -64.7799734332998,
-        // 32.3072000581802
-        // ],
-        // [
-        // -64.7873319183061,
-        // 32.3039237143428
-        // ],
-        // [
-        // -64.7946942710173,
-        // 32.3032682700388
-        // ],
-        // [
-        // -64.8094297981283,
-        // 32.3098175728414
-        // ],
-        // [
-        // -64.8167896352437,
-        // 32.3058845718466
-        // ],
-        // [
-        // -64.8101968029642,
-        // 32.3022833180511
-        // ],
-        // [
-        // -64.7962291465484,
-        // 32.2934409732427
-        // ],
-        // [
-        // -64.7815086336978,
-        // 32.2868973114514
-        // ],
-        // [
-        // -64.7997025513437,
-        // 32.2796896417328
-        // ],
-        // [
-        // -64.8066707691087,
-        // 32.2747767569465
-        // ],
-        // [
-        // -64.8225587873683,
-        // 32.2669111289395
-        // ],
-        // [
-        // -64.8287548840306,
-        // 32.2669075473817
-        // ],
-        // [
-        // -64.8306732143498,
-        // 32.2583944840235
-        // ],
-        // [
-        // -64.8399924854972,
-        // 32.254782282336
-        // ],
-        // [
-        // -64.8566090462354,
-        // 32.2547740387514
-        // ],
-        // [
-        // -64.8682296789446,
-        // 32.2616393614322
-        // ],
-        // [
-        // -64.8628241459563,
-        // 32.2724481933959
-        // ],
-        // [
-        // -64.8748651338951,
-        // 32.2757120264753
-        // ],
-        // [
-        // -64.8717752856644,
-        // 32.2819371582026
-        // ],
-        // [
-        // -64.8671422127295,
-        // 32.2930760547989
-        // ],
-        // [
-        // -64.8559068764437,
-        // 32.2960321186471
-        // ],
-        // [
-        // -64.8597429072279,
-        // 32.3015842021933
-        // ],
-        // [
-        // -64.8439233486717,
-        // 32.3140553852543
-        // ],
-        // [
-        // -64.8350242329311,
-        // 32.3242161760006
-        // ],
-        // [
-        // -64.8338690593672,
-        // 32.3294587561557
-        // ],
-        // [
-        // -64.8520298651164,
-        // 32.3110911879954
-        // ],
-        // [
-        // -64.8635922932573,
-        // 32.3048469433363
-        // ],
-        // [
-        // -64.8686668994079,
-        // 32.30910745083
-        // ],
-        // [
-        // -64.8721354593415,
-        // 32.3041908606301
-        // ],
-        // [
-        // -64.8779667328485,
-        // 32.3038632800462
-        // ],
-        // [
-        // -64.8780046844321,
-        // 32.2907757831692
-        // ],
-        // [
-        // -64.8849776658292,
-        // 32.2819261366004
-        // ],
-        // [
-        // -64.8783230004629,
-        // 32.2613001418681
-        // ],
-        // [
-        // -64.863194968877,
-        // 32.2465799485801
-        // ],
-        // [
-        // -64.8519819555722,
-        // 32.2485519134663
-        // ],
-        // [
-        // -64.842311980074,
-        // 32.2492123317296
-        // ],
-        // [
-        // -64.8388242605209,
-        // 32.2475773472534
-        // ],
-        // [
-        // -64.8334002575532,
-        // 32.2462714714698
-        // ],
-        // [
-        // -64.8256389530584,
-        // 32.2472637398594
-        // ],
-        // [
-        // -64.8205697556026,
-        // 32.2531698880328
-        // ],
-        // [
-        // -64.8105087275579,
-        // 32.2561208974156
-        // ],
-        // [
-        // -64.7900177727338,
-        // 32.2659446936992
-        // ],
-        // [
-        // -64.7745415970416,
-        // 32.2718413023427
-        // ],
-        // [
-        // -64.7644742436426,
-        // 32.2855931353214
-        // ],
-        // [
-        // -64.7551803442276,
-        // 32.2908326702531
-        // ],
-        // [
-        // -64.7423982971436,
-        // 32.2996734994024
-        // ],
-        // [
-        // -64.7206991797682,
-        // 32.3137542201258
-        // ],
-        // [
-        // -64.7117851247134,
-        // 32.3176823360806
-        // ],
-        // [
-        // -64.6962778813133,
-        // 32.3275029115532
-        // ],
-        // [
-        // -64.6768921127452,
-        // 32.3324095397555
-        // ],
-        // [
-        // -64.6567136927777,
-        // 32.3451776458469
-        // ],
-        // [
-        // -64.6532168823499,
-        // 32.3494356627941
-        // ],
-        // [
-        // -64.6605720384429,
-        // 32.3589423487763
-        // ],
-        // [
-        // -64.65125819471,
-        // 32.3615600906466
-        // ],
-        // [
-        // -64.6462011670816,
-        // 32.36975169749
-        // ],
-        // [
-        // -64.6613227512832,
-        // 32.3763135008721
-        // ],
-        // [
-        // -64.6690666074397,
-        // 32.388444543924
-        // ],
-        // [
-        // -64.6834270548595,
-        // 32.3854968316788
-        // ],
-        // [
-        // -64.6954617672714,
-        // 32.3763221285869
-        // ],
-        // [
-        // -64.70438689565,
-        // 32.3704254760469
-        // ],
-        // [
-        // -64.7117569982798,
-        // 32.368132600249
-        // ],
-        // [
-        // -64.7061764744404,
-        // 32.3600110593559
-        // ],
-        // [
-        // -64.700531552697,
-        // 32.3590601356818
-        // ],
-        // [
-        // -64.6940348033967,
-        // 32.3640708659835
-        // ],
-        // [
-        // -64.6895164826082,
-        // 32.3633598579866
-        // ],
-        // [
-        // -64.6864150099255,
-        // 32.3547797587266
-        // ],
-        // [
-        // -64.6824635995504,
-        // 32.3540628176846
-        // ],
-        // [
-        // -64.6835876652835,
-        // 32.3626447677968
-        // ],
-        // [
-        // -64.6801998697415,
-        // 32.3631199096979
-        // ],
-        // [
-        // -64.6672170444687,
-        // 32.3597751617473
-        // ],
-        // [
-        // -64.6598811264978,
-        // 32.3497625771755
-        // ],
-        // [
-        // -64.6737331235384,
-        // 32.3390281851635
-        // ],
-        // [
-        // -64.6887090648183,
-        // 32.3342439408053
-        // ],
-        // [
-        // -64.706732854446,
-        // 32.3429010723036
-        // ],
-        // [
-        // -64.7149301576112,
-        // 32.3552188753513
-        // ],
-        // [
-        // -64.7185967666669,
-        // 32.3552239212394
-        // ],
-        // [
-        // -64.7214189847314,
-        // 32.3518830231342
-        // ],
-        // [
-        // -64.7270616067222,
-        // 32.3466461715475
-        // ],
-        // [
-        // -64.734962460882,
-        // 32.3442819830499
-        // ],
-        // [
-        // -64.7383521549094,
-        // 32.3407216514918
-        // ],
-        // [
-        // -64.7411729976333,
-        // 32.3311790864627
-        // ],
-        // [
-        // -64.7423019216485,
-        // 32.323311561213
-        // ],
-        // [
-        // -64.7462482354281,
-        // 32.318538611581
-        // ],
-        // [
-        // -64.7566773739613,
-        // 32.3130509130175
-        // ],
-        // [
-        // -64.768738200563,
-        // 32.3088369816572
-        // ],
-        // [
-        // -64.7799734332998,
-        // 32.3072000581802
-        // ]
-        // ]
-        // ]
-        // }
-        // },
+        updateMapForYear(currentYear);
     </script>
 </body>
 
