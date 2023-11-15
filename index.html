@@ -214,6 +214,7 @@
 
         function renderBarChart(selectedPlayerName, playerStatsData) {
             const filteredData = playerStatsData.filter(d => d.Name === selectedPlayerName);
+            console.log(filteredData)
             let goalsByYear = d3.rollups(filteredData, v => d3.sum(v, d => d.Goals), d => d.Year)
                 .map(([Year, Goals]) => ({ Year, Goals }));
 
@@ -299,6 +300,21 @@
                 .on("mouseout", () => {
                     tooltip.style("opacity", 0);
                 });
+
+                d3.select("#bar-chart").append('div').attr("class", 'tag')
+
+                d3.select(".tag").append('text')
+               .text('Club: '+filteredData[filteredData.length-1].Club+' ')
+               .attr("transform", "translate(0, 400)")
+
+               d3.select(".tag").append('text')
+               .text('Nationality: '+filteredData[filteredData.length-1].Nationality+' ')
+               .attr("transform", "translate(400, 40)")
+
+               d3.select(".tag").append('text')
+               .text('Position: '+filteredData[filteredData.length-1].Position+' ')
+               .attr("transform", "translate(400, 40)")
+            
         }
 
         loadData();
