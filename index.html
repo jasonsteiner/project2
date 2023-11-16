@@ -323,4 +323,142 @@
     </script>
 </body>
 
+<head>
+    <title>Latest Player Data</title>
+    <style>
+        #slider-container, #player-limit-container {
+            margin-bottom: 20px;
+        }
+
+        #players-container {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .player-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 10px;
+            padding: 10px;
+            width: 200px;
+        }
+
+        .player-image {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Latest Player Data</h1>
+        <div id="slider-container">
+            <p id="minValueLabel">Min Value: €0</p>
+            <input type="range" id="minValue" min="0" max="200000000" step="2000000" value="0">
+            <p id="maxValueLabel">Max Value: €200,000,000</p>
+            <input type="range" id="maxValue" min="0" max="200000000" step="2000000" value="200000000">
+        </div>
+        <div id="player-limit-container">
+            <p id="playerLimitLabel">Player Limit: 10</p>
+            <input type="range" id="playerLimit" min="1" max="50" step="1" value="10">
+        </div>
+        <div id="players-container">
+            <!-- Player cards will be added here dynamically -->
+        </div>
+    </div>
+
+    <script>
+        async function fetchPlayerData() {
+            const response = await fetch('yearly_aggregated_players.csv');
+            const data = await response.text();
+
+            const lines = data.split('\n');
+            const headers = lines[0].split(',');
+
+            const playersSet = new Set();
+            const players = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                if (values.length === headers.length) {
+                    const player = {};
+                    for (let j = 0; j < headers.length; j++) {
+                        player[headers[j]] = values[j];
+                    }
+                    if (!playersSet.has(player.player_id)) {
+                        playersSet.add(player.player_id);
+                        players.push(player);
+                    }
+                }
+            }
+            return players;
+        }
+
+        function filterPlayers(minValue, maxValue, players) {
+            return players.filter(player => player.highest_market_value_in_eur >= minValue && player.highest_market_value_in_eur <= maxValue);
+        }
+
+        function updateSliderLabel(labelId, sliderId) {
+            const labelElement = document.getElementById(labelId);
+            const sliderElement = document.getElementById(sliderId);
+            labelElement.textContent = `${labelElement.textContent.split(':')[0]}: €${sliderElement.valueAsNumber.toLocaleString()}`;
+        }
+
+        function updatePlayers(players) {
+            const minValue = document.getElementById('minValue').valueAsNumber;
+            const maxValue = document.getElementById('maxValue').valueAsNumber;
+            const playerLimit = document.getElementById('playerLimit').valueAsNumber;
+            let filteredPlayers = filterPlayers(minValue, maxValue, players);
+
+            // Limiting the number of players displayed
+            filteredPlayers = filteredPlayers.slice(0, playerLimit);
+
+            const playersContainer = document.getElementById('players-container');
+            playersContainer.innerHTML = '';
+
+            filteredPlayers.forEach(player => {
+                const playerCard = document.createElement('div');
+                playerCard.classList.add('player-card');
+
+                const playerImage = document.createElement('img');
+                playerImage.src = player.image_url;
+                playerImage.alt = player.name;
+                playerImage.classList.add('player-image');
+
+                const playerName = document.createElement('p');
+                playerName.textContent = player.name;
+
+                playerCard.appendChild(playerImage);
+                playerCard.appendChild(playerName);
+
+                updateSliderLabel('minValueLabel', 'minValue');
+                updateSliderLabel('maxValueLabel', 'maxValue');
+
+                if (player.highest_market_value_in_eur !== undefined) {
+                    const playerValuation = document.createElement('p');
+                    playerValuation.textContent = `Valuation: €${player.highest_market_value_in_eur.toLocaleString()}`;
+                    playerCard.appendChild(playerValuation);
+                }
+
+                playersContainer.appendChild(playerCard);
+            });
+        }
+
+        document.getElementById('minValue').addEventListener('input', () => updatePlayers(players));
+        document.getElementById('maxValue').addEventListener('input', () => updatePlayers(players));
+        document.getElementById('playerLimit').addEventListener('input', function() {
+            document.getElementById('playerLimitLabel').textContent = `Player Limit: ${this.value}`;
+            updatePlayers(players);
+        });
+
+        let players = [];
+        fetchPlayerData().then(data => {
+            players = data;
+            updatePlayers(players);
+        });
+    </script>
+</body>
+
 </html>
