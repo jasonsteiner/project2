@@ -5,6 +5,23 @@
     <title>Project 2</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
+        body {
+            background-color: #f8fff8;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+    
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+    
+        h1 {
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    
         .tooltip {
             position: absolute;
             text-align: center;
@@ -20,46 +37,77 @@
             box-shadow: 2px 2px 5px rgba(0, 34, 255, 0.2);
             color: #000000;
         }
-
-        #sliderContainer {
+    
+        #sliderContainer, #slider-container, #player-limit-container {
             text-align: center;
             padding: 20px;
+            margin-bottom: 20px;
         }
-
+    
         input[type=range] {
-            width: 300px;
+            width: 100%;
             margin: 10px 0;
         }
-
-        #map {
-            margin-top: 20px;
+    
+        select {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 20px;
         }
-
+    
+        #map, #bar-chart, #scatterplot {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+    
         .bar {
             fill: rgb(141, 173, 255);
         }
-
-        .player-card p{
+    
+        .player-card {
+            border: 1px solid #000000;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+    
+        .player-card:hover {
+            transform: translateY(-5px);
+        }
+    
+        .player-image {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+        }
+    
+        #players-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+    
+        .details {
+            font-size: 12px;
             margin-top: 0px;
             margin-bottom: 4px;
         }
-
-        .details {
-            font-size: 12px;
-        }
     </style>
+    
 </head>
 
 <body>
     <div class="container">
         <h1>Project 2</h1>
         <div id="sliderContainer">
-            <input type="range" id="yearSlider">
             <p>Year: <span id="selectedYear"></span></p>
+            <input type="range" id="yearSlider">
         </div>
         <div id="map"></div>
         <div id="player-selection">
-            <label for="player-dropdown">Click a Year/Country First!</label>
+            <label for="player-dropdown">Click a Year and Country First:</label>
             <select id="player-dropdown"></select>
         </div>
         <div id="bar-chart"></div>
