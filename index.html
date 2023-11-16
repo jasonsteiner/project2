@@ -38,6 +38,15 @@
         .bar {
             fill: rgb(141, 173, 255);
         }
+
+        .player-card p{
+            margin-top: 0px;
+            margin-bottom: 4px;
+        }
+
+        .details {
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -109,7 +118,8 @@
             var width = 960, height = 500;
             var svg = d3.select('#map').append('svg')
                 .attr('viewBox', `0 0 ${width} ${height}`)
-                .attr('preserveAspectRatio', 'xMidYMid meet');
+                .attr('preserveAspectRatio', 'xMidYMid meet')
+                .attr('width', '90%');
 
             // Append a rect element first for the background
             svg.append('rect')
@@ -336,17 +346,23 @@
         }
 
         .player-card {
-            border: 1px solid #ddd;
+            border: 1px solid #000000;
             border-radius: 5px;
             margin: 10px;
             padding: 10px;
             width: 200px;
+            background-color: #ffffff;
         }
 
         .player-image {
             max-width: 100%;
             height: auto;
             margin-bottom: 10px;
+        }
+
+        body {
+            background-color: #f8fff8;
+            margin: 80px;
         }
     </style>
 </head>
@@ -414,6 +430,7 @@
 
             // Limiting the number of players displayed
             filteredPlayers = filteredPlayers.slice(0, playerLimit);
+            console.log(filteredPlayers)
 
             const playersContainer = document.getElementById('players-container');
             playersContainer.innerHTML = '';
@@ -438,8 +455,19 @@
 
                 if (player.highest_market_value_in_eur !== undefined) {
                     const playerValuation = document.createElement('p');
+                    playerValuation.className = "details";
                     playerValuation.textContent = `Valuation: €${player.highest_market_value_in_eur.toLocaleString()}`;
                     playerCard.appendChild(playerValuation);
+
+                    const playerCountryofBirth = document.createElement('p');
+                    playerCountryofBirth.className = "details";
+                    playerCountryofBirth.textContent = `Country of birth: ${player.country_of_birth.toLocaleString()}`;
+                    playerCard.appendChild(playerCountryofBirth);
+
+                    const playerPosition = document.createElement('p');
+                    playerPosition.className = "details";
+                    playerPosition.textContent = `Position: ${player.position.toLocaleString()}`;
+                    playerCard.appendChild(playerPosition);
                 }
 
                 playersContainer.appendChild(playerCard);
