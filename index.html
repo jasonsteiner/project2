@@ -241,7 +241,7 @@
                 .attr("y", d => y(d.goals))
                 .attr("width", x.bandwidth())
                 .attr("height", d => height - y(d.goals))
-                .attr("fill", "#69b3a2");
+                .attr("fill", "#add8e6");
 
             svg.append("g")
                 .attr("transform", `translate(0,${height})`)
@@ -249,6 +249,19 @@
 
             svg.append("g")
                 .call(d3.axisLeft(y));
+            
+            svg.append("text")
+                .attr("transform", `translate(${width / 2}, ${height + margin.top + 20})`)
+                .style("text-anchor", "middle")
+                .text("Year");
+
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x",0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Goals");
         }
 
         d3.select("#player-dropdown").on("change", function () {
@@ -303,7 +316,7 @@
                 .attr("cx", d => x(d.avgGoals))
                 .attr("cy", d => y(d.avgAssists))
                 .attr("r", 3)
-                .style("fill", "#69b3a2")
+                .style("fill", "#add8e6")
                 .on("mouseover", function (event, d) {
                     tooltip.transition()
                         .duration(200)
@@ -317,6 +330,19 @@
                         .duration(500)
                         .style("opacity", 0);
                 });
+
+            svg.append("text")             
+                .attr("transform", `translate(${width / 2}, ${height + margin.top + 20})`)
+                .style("text-anchor", "middle")
+                .text("Average Goals");
+
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x",0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Average Assists");
         }
 
         updateMapForYear(currentYear);
